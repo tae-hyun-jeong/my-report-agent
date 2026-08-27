@@ -2,7 +2,7 @@ import os
 import sys
 import requests
 import xml.etree.ElementTree as ET
-import google.generativeai as genai
+from google import genai
 from datetime import datetime
 
 # 1. 시크릿 값 불러오기
@@ -14,7 +14,8 @@ if not all([TELEGRAM_TOKEN, CHAT_ID, GEMINI_API_KEY]):
     print("[오류] 시크릿 키 설정이 누락되었습니다.")
     sys.exit(1)
 
-genai.configure(api_key=GEMINI_API_KEY)
+# 최신 Google GenAI 클라이언트 생성
+ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # 2. arXiv 최신 배터리 논문 가져오기
 def fetch_arxiv_papers():
@@ -48,9 +49,8 @@ def fetch_google_news(keyword):
     except Exception as e:
         return f"뉴스 수집 에러: {e}"
 
-# 4. Gemini AI에게 한국어 브리핑 작성 요청하기
+# 4. Gemini 2.5 Flash에게 한국어 브리핑 작성 요청하기
 def summarize_with_ai(raw_text):
-    model = genai.GenerativeModel("gemini-1.5-flash")
     today = datetime.now().strftime("%Y-%m-%d")
     prompt = f"""
 당신은 배터리 및 AI 분야 전문 애널리스트입니다.
@@ -59,30 +59,35 @@ def summarize_with_ai(raw_text):
 [작성 규칙]
 1. 가독성 좋게 이모지와 불릿포인트를 사용하세요.
 2. 아래 3가지 섹션으로 나누어 작성하세요:
-   🔋 [1] 리튬이온/차세대 배터리 주요 논문 요약 (핵심 인사이트 1~2줄 + 논문 링크)
-   📈 [2] 리튬 배터리 산업 및 시장 동향 (핵심 시사점)
-   🤖 [3] 글로벌 AI 시장 및 테크 동향 (핵심 시사점)
+🔋 [1] 리튬이온/차세대 배터리 주요 논문 요약 (핵심 인사이트 1~2줄 + 논문 링크)
+📈 [2] 리튬 배터리 산업 및 시장 동향 (핵심 시사점)
+🤖 [3] 글로벌 AI 시장 및 테크 동향 (핵심 시사점)
 3. 텔레그램 화면에서 읽기 편하게 1,500자 이내로 핵심만 간결하게 작성하세요.
 
 [수집 데이터]
 {raw_text}
 """
-    response = model.generate_content(prompt)
+    response = ai_client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
     return response.text
 
 # 5. 텔레그램으로 메시지 보내기
 def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "disable_web_page_preview": True
-    }
-    res = requests.post(url, json=payload, timeout=15)
-    if res.ok:
-        print("텔레그램 전송 성공!")
-    else:
-        print("전송 실패:", res.text)
+    target_ids = [cid.strip() for cid in CHAT_ID.split(",") if cid.strip()]
+    for cid in target_ids:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": cid,
+            "text": message,
+            "disable_web_page_preview": True
+        }
+        res = requests.post(url, json=payload, timeout=15)
+        if res.ok:
+            print(f"텔레그램 전송 성공! (Chat ID: {cid})")
+        else:
+            print(f"전송 실패 (Chat ID: {cid}):", res.text)
 
 if __name__ == "__main__":
     print("1. 논문 및 뉴스 수집 중...")
