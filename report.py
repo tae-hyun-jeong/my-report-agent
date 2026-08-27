@@ -68,7 +68,7 @@ def summarize_with_ai(raw_text):
 {raw_text}
 """
     response = ai_client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-3.6-flash",
         contents=prompt
     )
     return response.text
