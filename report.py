@@ -17,7 +17,7 @@ if not all([TELEGRAM_TOKEN, CHAT_ID, GEMINI_API_KEY]):
 # 최신 Google GenAI 클라이언트 생성
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# 2. 목적별 맞춤형 논문 수집 (저전압선별 / 차세대배터리 / 일반리튬)
+# 2. 목적별 맞춤형 논문 수집 (Formation공정 / 차세대배터리 / 일반리튬)
 def fetch_specific_arxiv(query, label):
     url = f'https://export.arxiv.org/api/query?search_query={query}&sortBy=submittedDate&sortOrder=descending&max_results=1'
     try:
@@ -53,7 +53,7 @@ def fetch_google_news(keyword, max_count=4):
 def summarize_with_ai(raw_text):
     today = datetime.now().strftime("%Y-%m-%d")
     prompt = f"""
-당신은 배터리 공정 및 AI 산업 전문 수석 애널리스트입니다.
+당신은 배터리 공정(Formation/화성) 및 AI 산업 전문 수석 애널리스트입니다.
 아래 수집된 원문 데이터를 바탕으로 텔레그램 데일리 리포트({today})를 아래 **엄격한 작성 규칙과 포맷**에 맞춰 한국어로 작성해주세요.
 
 [작성 규칙 및 포맷]
@@ -61,7 +61,7 @@ def summarize_with_ai(raw_text):
 
 2. 🔋 **연구 문헌 (총 3건, 중복 없음)**
    - 각 논문은 반드시 **목적**과 **결과**를 각각 **3줄 이내**로 압축해서 요약하세요.
-   - [1] 저전압 선별/결함 관련 논문
+   - [1] Formation(화성/활성화 및 SEI 형성) 공정 관련 논문
    - [2] 차세대 배터리 연구 관련 논문
    - [3] 일반 리튬이온 배터리 관련 논문
 
@@ -100,16 +100,19 @@ def send_telegram(message):
 
 if __name__ == "__main__":
     print("1. 논문 및 뉴스 수집 중...")
-    paper_low_voltage = fetch_specific_arxiv('all:"low-voltage" OR all:"self-discharge" OR all:"defect detection" battery', '1. 저전압 선별 관련 논문')
+    # 1) Formation 공정 및 초기 SEI 피막/화성 관련 논문 쿼리
+    paper_formation = fetch_specific_arxiv('all:"battery formation" OR all:"formation protocol" OR all:"SEI formation" OR all:"formation cycling" battery', '1. Formation(화성/활성화) 공정 관련 논문')
+    # 2) 차세대 배터리 논문 쿼리
     paper_next_gen = fetch_specific_arxiv('all:"solid-state battery" OR all:"silicon anode" OR all:"lithium metal"', '2. 차세대 배터리 연구 논문')
+    # 3) 일반 리튬이온 배터리 논문 쿼리
     paper_general = fetch_specific_arxiv('all:"lithium-ion battery" OR all:"cycling stability" OR all:"capacity fade"', '3. 일반 리튬이온 배터리 논문')
 
-    battery_news = fetch_google_news("리튬이온 배터리 시장 동향 OR 배터리 공급망")
+    battery_news = fetch_google_news("리튬이온 배터리 시장 동향 OR 배터리 산업")
     ai_news = fetch_google_news("글로벌 AI 시장 동향 OR 인공지능 빅테크")
 
     all_data = f"""
-=== 1. 저전압 선별 관련 논문 ===
-{paper_low_voltage}
+=== 1. Formation 공정 관련 논문 ===
+{paper_formation}
 
 === 2. 차세대 배터리 연구 논문 ===
 {paper_next_gen}
