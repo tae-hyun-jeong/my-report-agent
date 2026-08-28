@@ -2,18 +2,19 @@ name: Daily Battery & AI Report
 
 on:
   schedule:
-    # 한국 시간(KST) 기준 매일 아침 08:00 자동 실행 (UTC 23:00)
-    - cron: '0 23 * * *'
-  workflow_dispatch: # 수동 실행(테스트) 버튼
+    # 한국 시간(KST) 매일 아침 07:45 실행 (UTC 22:45)
+    - cron: '45 22 * * *'
+  workflow_dispatch:
 
 jobs:
   daily-job:
     runs-on: ubuntu-latest
+
     steps:
       - name: 코드 가져오기
         uses: actions/checkout@v4
 
-      - name: 파이썬 설정
+      - name: 파이썬 환경 설정
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
