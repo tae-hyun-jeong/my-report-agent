@@ -2,9 +2,12 @@ name: Daily Battery & AI Report
 
 on:
   schedule:
-    # 한국 시간(KST) 기준 매일 아침 08:00 자동 실행 (UTC 23:00)
-    - cron: '0 23 * * *'
-  workflow_dispatch: # 수동 실행(테스트) 버튼
+    # [예시 1] 한국 시간(KST) 매일 아침 07:45 실행 (UTC 22:45) - 추천!
+    - cron: '45 22 * * *'
+    
+    # [예시 2] 한국 시간(KST) 매일 아침 08:15 실행 (UTC 23:15)
+    # - cron: '15 23 * * *'
+  workflow_dispatch:
 
 jobs:
   daily-job:
