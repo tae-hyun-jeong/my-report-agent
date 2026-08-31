@@ -17,22 +17,27 @@ if not all([TELEGRAM_TOKEN, CHAT_ID, GEMINI_API_KEY]):
 # 최신 Google GenAI 클라이언트 생성
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# 2. 목적별 맞춤형 논문 수집 (Formation공정 / 차세대배터리 / 일반리튬)
+# 2. 배터리 논문 전용 정밀 검색 (제목/초록 기반 필터링으로 LLM/컴퓨터공학 논문 완전 차단)
 def fetch_specific_arxiv(query, label):
-    url = f'https://export.arxiv.org/api/query?search_query={query}&sortBy=submittedDate&sortOrder=descending&max_results=1'
+    url = f'https://export.arxiv.org/api/query?search_query={query}&sortBy=submittedDate&sortOrder=descending&max_results=3'
     try:
         res = requests.get(url, timeout=15)
         root = ET.fromstring(res.content)
         ns = {'atom': 'http://www.w3.org/2005/Atom'}
-        entry = root.find('atom:entry', ns)
-        if entry is not None:
+        
+        entries = root.findall('atom:entry', ns)
+        for entry in entries:
             title = entry.find('atom:title', ns).text.strip().replace('\n', ' ')
             summary = entry.find('atom:summary', ns).text.strip().replace('\n', ' ')
             link = entry.find('atom:id', ns).text.strip()
-            return f"[{label}]\n- 제목: {title}\n- 링크: {link}\n- 초록 원문: {summary[:500]}..."
+            
+            # 본문에 battery / lithium 관련 단어가 확실히 포함된 것만 선정
+            text_check = (title + summary).lower()
+            if "battery" in text_check or "batteries" in text_check or "lithium" in text_check:
+                return f"[{label}]\n- 제목: {title}\n- 링크: {link}\n- 초록 원문: {summary[:500]}..."
     except Exception as e:
         pass
-    return f"[{label}] 논문 수집 결과 없음"
+    return f"[{label}] 최근 3년 내 수집된 관련 배터리 논문 없음"
 
 # 3. 구글 뉴스 RSS 수집
 def fetch_google_news(keyword, max_count=4):
@@ -53,17 +58,21 @@ def fetch_google_news(keyword, max_count=4):
 def summarize_with_ai(raw_text):
     today = datetime.now().strftime("%Y-%m-%d")
     prompt = f"""
-당신은 배터리 공정(Formation/화성) 및 AI 산업 전문 수석 애널리스트입니다.
+당신은 리튬이온 배터리 공정/소재 및 AI 산업 전문 수석 애널리스트입니다.
 아래 수집된 원문 데이터를 바탕으로 텔레그램 데일리 리포트({today})를 아래 **엄격한 작성 규칙과 포맷**에 맞춰 한국어로 작성해주세요.
+
+[중요 지침]
+- **연구 문헌은 반드시 순수 화학/소재 '배터리' 관련 연구만 다루어야 합니다.** (LLM, NLP, 소프트웨어 AI 모델 논문은 배터리 논문 섹션에 절대 포함하지 마세요.)
+- 배터리 논문 3건은 최근 3년 내 발표된 최신 연구 기준으로 요약합니다.
 
 [작성 규칙 및 포맷]
 1. 가독성 좋게 이모지와 불릿포인트를 사용하세요.
 
-2. 🔋 **연구 문헌 (총 3건, 중복 없음)**
-   - 각 논문은 반드시 **목적**과 **결과**를 각각 **3줄 이내**로 압축해서 요약하세요.
+2. 🔋 **연구 문헌 (총 3건, 배터리 연구)**
+   - 각 논문은 반드시 **목적:**과 **결과:**를 각각 **3줄 이내**로 압축해서 요약하세요. (원문 링크 포함)
    - [1] Formation(화성/활성화 및 SEI 형성) 공정 관련 논문
-   - [2] 차세대 배터리 연구 관련 논문
-   - [3] 일반 리튬이온 배터리 관련 논문
+   - [2] 차세대 배터리(전고체/실리콘음극/리튬메탈 등) 연구 관련 논문
+   - [3] 일반 리튬이온 배터리(수명/열화/안전성 등) 관련 논문
 
 3. 📈 **리튬 배터리 산업 및 시장 동향**
    - 동향 요약: 핵심 내용을 **3줄**로 작성하세요.
@@ -100,14 +109,20 @@ def send_telegram(message):
 
 if __name__ == "__main__":
     print("1. 논문 및 뉴스 수집 중...")
-    # 1) Formation 공정 및 초기 SEI 피막/화성 관련 논문 쿼리
-    paper_formation = fetch_specific_arxiv('all:"battery formation" OR all:"formation protocol" OR all:"SEI formation" OR all:"formation cycling" battery', '1. Formation(화성/활성화) 공정 관련 논문')
-    # 2) 차세대 배터리 논문 쿼리
-    paper_next_gen = fetch_specific_arxiv('all:"solid-state battery" OR all:"silicon anode" OR all:"lithium metal"', '2. 차세대 배터리 연구 논문')
-    # 3) 일반 리튬이온 배터리 논문 쿼리
-    paper_general = fetch_specific_arxiv('all:"lithium-ion battery" OR all:"cycling stability" OR all:"capacity fade"', '3. 일반 리튬이온 배터리 논문')
+    
+    # 1) Formation/SEI 공정 배터리 논문 (제목/초록 타겟팅)
+    query_formation = '(ti:formation OR abs:formation OR ti:SEI OR abs:SEI) AND (ti:battery OR abs:battery OR ti:lithium OR abs:lithium)'
+    paper_formation = fetch_specific_arxiv(query_formation, '1. Formation(화성/활성화) 공정 관련 논문')
 
-    battery_news = fetch_google_news("리튬이온 배터리 시장 동향 OR 배터리 산업")
+    # 2) 차세대 배터리 논문 (전고체, 실리콘, 리튬메탈)
+    query_next_gen = '(ti:"solid-state" OR abs:"solid-state" OR ti:"silicon anode" OR abs:"silicon anode" OR ti:"lithium metal" OR abs:"lithium metal") AND (ti:battery OR abs:battery)'
+    paper_next_gen = fetch_specific_arxiv(query_next_gen, '2. 차세대 배터리 연구 논문')
+
+    # 3) 일반 리튬이온 배터리 논문 (수명, 열화, 전해액 등)
+    query_general = '(ti:"lithium-ion battery" OR abs:"lithium-ion battery" OR ti:"capacity fade" OR abs:"capacity fade" OR ti:"electrolyte" OR abs:"electrolyte") AND (ti:battery OR abs:battery)'
+    paper_general = fetch_specific_arxiv(query_general, '3. 일반 리튬이온 배터리 논문')
+
+    battery_news = fetch_google_news("리튬이온 배터리 시장 OR 배터리 공급망 OR K배터리")
     ai_news = fetch_google_news("글로벌 AI 시장 동향 OR 인공지능 빅테크")
 
     all_data = f"""
